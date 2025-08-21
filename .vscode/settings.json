@@ -9,5 +9,16 @@
   "idf.toolsPathWin": "C:\\Espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"
+  },
+  "idf.flashType": "UART",
+  "files.associations": {
+    "rc522_i2c.h": "c",
+    "rc522.h": "c",
+    "rc522_driver.h": "c",
+    "i2c_master.h": "c",
+    "led_driver.h": "c",
+    "cstdint": "c",
+    "rc522_implementation.h": "c",
+    "lcd_1602.h": "c"
   }
 }
