@@ -2,6 +2,7 @@
 #include "4x4_matrix.h"
 #include "lcd_1602.h"
 #include "led_driver.h"
+#include "am312.h"
 
 #include "include/rc522_implementation.h"
 #include "esp_log.h"
@@ -15,6 +16,14 @@
 const char* TAG = "MAIN";
 
 char buf[5];
+
+static void motion_cb(void *user) {
+    const char *name = (const char*)user;
+    ESP_LOGI(TAG, "%s", name);
+}
+
+// Själva larmet ska ha en bit som säger ifall det är triggered eller inte som vi inväntar.
+
 
 int app_main(void)
 {
@@ -48,9 +57,12 @@ int app_main(void)
 
     rc522_init();
 
+    am312_handle_t sensor = am312_init(GPIO_NUM_13, motion_cb, "hall", 2500, 250);
     
+    am312_set_armed(sensor, true);
+
     while(true) {
-        lcd_1602_send_string(dev_handle, "ENTER CODE:");
+/*         lcd_1602_send_string(dev_handle, "ENTER CODE:");
 
         led_on(orange_led);
         _4x4_matrix_scan_keys(buf, 5);
@@ -68,6 +80,8 @@ int app_main(void)
         vTaskDelay(pdMS_TO_TICKS(5000));
 
         led_off(green_led);
-        led_off(red_led);
+        led_off(red_led); */
+
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
