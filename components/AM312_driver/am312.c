@@ -48,6 +48,7 @@ struct am312_handle {
     TickType_t last_tick;
     TickType_t settle_ticks;
     TickType_t debounce_ticks;
+    QueueHandle_t app_queue;
 };
 
 static QueueHandle_t am312_queue = NULL;

@@ -19,6 +19,8 @@
     "led_driver.h": "c",
     "cstdint": "c",
     "rc522_implementation.h": "c",
-    "lcd_1602.h": "c"
+    "lcd_1602.h": "c",
+    "task.h": "c",
+    "alarm_system.h": "c"
   }
 }

@@ -12,4 +12,5 @@ idf_component_register(
         esp_wifi          # <-- om wifi_implementation.c använder Wi-Fi
         esp_event
         esp_netif
+        app_events
 )
