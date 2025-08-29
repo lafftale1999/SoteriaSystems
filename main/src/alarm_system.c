@@ -46,6 +46,23 @@ static void motion_cb(void) {
     xQueueSend(app_queue, &event, portMAX_DELAY);
 }
 
+static bool check_cred(app_handle_t event) {
+    
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    switch (event.event_type) {
+        case EV_RFID:
+            if(strcmp(event.rfid.uid, "00 32 00 43")) return true;
+            break;
+
+        case EV_PIN:
+            if(strcmp(event.pin.pin, "4934")) return true;
+            break;
+    }
+
+    return false;
+}
+
 static void set_alarm_armed(alarm_system_handle_t handle) {
     xQueueReset(app_queue);
     lcd_1602_send_string(handle->lcd_i2c_handle, "Pin:");
@@ -56,6 +73,9 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
     uint8_t pin_max_len = 4;
     char pin[5];
 
+    //test bool
+    bool is_auth = false;
+
     bool is_waiting = true;
     while(is_waiting) {
         if(!xQueueReceive(app_queue, &event, portMAX_DELAY)) continue;
@@ -63,8 +83,10 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
         switch (event.event_type) {
         case EV_RFID:
             // send rfid
+            
             is_waiting = false;
             lcd_1602_send_string(handle->lcd_i2c_handle, "Waiting ...");
+            is_auth = check_cred(event);
             break;
 
         case EV_CHAR_RECEIVED:
@@ -78,8 +100,14 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
                 if(pin_len == pin_max_len) {
                     pin[pin_max_len] = '\0';
                     is_waiting = false;
+                    app_handle_t pin_event = {
+                        .event_type = EV_PIN
+                    };
+
+                    memcpy(pin_event.pin.pin, pin, sizeof(pin_event.pin.pin));
                     // send rfid
                     lcd_1602_send_string(handle->lcd_i2c_handle, "Waiting ...");
+                    is_auth = check_cred(pin_event);
                 }
             }    
             break;
@@ -88,8 +116,25 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
             break;
         }
     }
-
     rc522_pause(handle->rc522);
+
+    led_handle_t temp;
+    led_off(handle->orange_led);
+
+    if(is_auth) {
+        temp = handle->green_led;
+        led_on(temp);
+        lcd_1602_send_string(handle->lcd_i2c_handle, "Welcome User!");
+    }
+    else {
+        temp = handle->red_led;
+        led_on(temp);
+        lcd_1602_send_string(handle->lcd_i2c_handle, "Not Authorized!");
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    is_armed = !is_armed;
 }
 
 static void alarm_wakeup(alarm_system_handle_t handle, app_handle_t event) {
@@ -110,9 +155,11 @@ static void alarm_wakeup(alarm_system_handle_t handle, app_handle_t event) {
     while(1) {
         if (event.key.key_pressed == ' a') {
             set_alarm_armed(handle);
+            break;
         }
         else if (event.key.key_pressed == 'b') {
-
+            // new user
+            break;
         }
         else if (event.key.key_pressed == 'c') {
             lcd_1602_send_string(handle->lcd_i2c_handle, " ");
@@ -131,20 +178,12 @@ void run_alarm(alarm_system_handle_t handle) {
     while(1) {
         if(!xQueueReceive(app_queue, &event, portMAX_DELAY)) continue;
         
-        switch(state) {
-            case ALARM_SLEEP:
-                alarm_wakeup(handle, event);
-                break;
-
-            case ALARM_ACTIVE:
-
-                break;
-
-            case ALARM_WAITING:
-
-                break;
+        if(event.event_type == EV_CHAR_RECEIVED) {
+            alarm_wakeup(handle, event);
         }
-
+        else if(event.event_type == EV_MOTION) {
+            led_on(handle->red_led);
+        }
     }
 }
 

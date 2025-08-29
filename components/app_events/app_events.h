@@ -1,7 +1,12 @@
-#pragma once
+#ifndef _APP_EVENTS_H_
+#define _APP_EVENTS_H_
 
 #include <stdint.h>
 #include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum app_event_e{
     EV_PIN,
@@ -17,6 +22,10 @@ typedef struct {
         struct {
             char key_pressed;
         } key;
+
+        struct {
+            char pin[5];
+        } pin;
         
         struct {
             char uid[30];
@@ -28,3 +37,9 @@ typedef struct {
         } motion;
     };
 } app_handle_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
