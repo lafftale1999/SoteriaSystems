@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "alarm_system.h"
+#include "wifi_implementation.h"
 
 #include "esp_log.h"
 #include "esp_err.h"
@@ -22,13 +23,10 @@ int app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    alarm_system_handle_t alarm_system;
-    if (init_alarm(alarm_system) != 0) {
+    alarm_system_handle_t alarm_system = NULL;
+    if (init_alarm(&alarm_system) != 0) {
         ESP_LOGE(TAG, "Unable to initialize alarm system");
     }
-
-    wifi_init();
-    wait_for_connection();
 
     while(true) {
         run_alarm(alarm_system);

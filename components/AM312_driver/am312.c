@@ -41,7 +41,7 @@ typedef struct{
 struct am312_handle {
     gpio_num_t pin;
     am312_cb_t cb_func;
-    void *user;
+    void *handle;
     volatile bool is_armed;
     volatile bool is_alive;
     TickType_t armed_since;
@@ -80,7 +80,7 @@ static bool am312_shared_init_once() {
     return true;
 }
 
-am312_handle_t am312_init(gpio_num_t pin, am312_cb_t cb_func, void *user, uint32_t settle_ms, uint32_t debounce_ms) {
+am312_handle_t am312_init(gpio_num_t pin, am312_cb_t cb_func, void *user_handle, uint32_t settle_ms, uint32_t debounce_ms) {
     if(!am312_shared_init_once()) return NULL;
 
     am312_handle_t handle = calloc(1, sizeof(*handle));
@@ -88,7 +88,7 @@ am312_handle_t am312_init(gpio_num_t pin, am312_cb_t cb_func, void *user, uint32
 
     handle->pin = pin;
     handle->cb_func = cb_func;
-    handle->user = user;
+    handle->handle = user_handle;
     handle->settle_ticks = pdMS_TO_TICKS(settle_ms > AM312_MIN_SETTLE_MS ? settle_ms : AM312_MIN_SETTLE_MS);
     handle->debounce_ticks = pdMS_TO_TICKS(debounce_ms > AM312_MIN_DEBOUNCE_MS ? debounce_ms : AM312_MIN_DEBOUNCE_MS);
     handle->is_alive = true;
@@ -216,7 +216,7 @@ static void am312_task(void *arg) {
         handle->last_tick = event.tick;
 
         if(event.gpio_level == 1 && handle->cb_func) {
-            handle->cb_func(handle->user);
+            handle->cb_func(handle->handle);
         }
     }
 }

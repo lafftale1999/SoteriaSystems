@@ -23,6 +23,7 @@
     "task.h": "c",
     "alarm_system.h": "c",
     "4x4_matrix.h": "c",
-    "freertos.h": "c"
+    "freertos.h": "c",
+    "stdint.h": "c"
   }
 }

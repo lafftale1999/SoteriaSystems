@@ -1,4 +1,5 @@
 #include <esp_log.h>
+#include "rc522.h"
 #include "driver/rc522_spi.h"
 #include "rc522_picc.h"
 #include "driver/gpio.h"
@@ -50,10 +51,10 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
     }
 }
 
-
-
-uint8_t rc522_init(rc522_handle_t scanner, QueueHandle_t owner_queue)
+uint8_t rc522_init(rc522_handle_t *out, QueueHandle_t owner_queue)
 {
+    if(!out) return 1;
+
     if(!rc522_is_created) {
         ESP_ERROR_CHECK(rc522_spi_create(&driver_config, &driver));
         ESP_ERROR_CHECK(rc522_driver_install(driver));
@@ -62,15 +63,20 @@ uint8_t rc522_init(rc522_handle_t scanner, QueueHandle_t owner_queue)
             .driver = driver,
         };
 
+        rc522_handle_t scanner = NULL;
+
         ESP_ERROR_CHECK(rc522_create(&scanner_config, &scanner));
         ESP_ERROR_CHECK(rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED, on_picc_state_changed, NULL));
 
         rc522_is_created = true;
+
+        *out = scanner;
     }
 
     if(!app_queue && owner_queue != NULL) {
         app_queue = owner_queue;
     }
+    
     
     return 0;
 }
