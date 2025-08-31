@@ -1,6 +1,6 @@
 idf_component_register(
-    SRCS "main.c" "src/rc522_implementation.c" "src/wifi_implementation.c"
-    INCLUDE_DIRS "." "include"      # din egen include/ i main
+    SRCS "main.c" "src/rc522_implementation.c" "src/wifi_implementation.c" "src/alarm_system.c"
+    INCLUDE_DIRS "." "include"
     REQUIRES
         rc522
         4x4_matrix_keypad_driver
@@ -8,8 +8,9 @@ idf_component_register(
         project_config
         led_driver
         AM312_driver
-        nvs_flash         # <-- behövs för nvs_flash.h + länkning
-        esp_wifi          # <-- om wifi_implementation.c använder Wi-Fi
+        nvs_flash
+        esp_wifi
         esp_event
         esp_netif
+        app_events
 )

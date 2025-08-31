@@ -5,7 +5,9 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 
-static const char *TAG = "rc522-basic-example";
+#include "app_events.h"
+
+static const char *TAG = "rc522";
 
 #define RC522_SPI_BUS_GPIO_MISO    GPIO_NUM_19
 #define RC522_SPI_BUS_GPIO_MOSI    GPIO_NUM_23
@@ -27,7 +29,8 @@ static rc522_spi_config_t driver_config = {
 };
 
 static rc522_driver_handle_t driver;
-static rc522_handle_t scanner;
+static QueueHandle_t app_queue;
+static bool rc522_is_created = false;
 
 static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t event_id, void *data)
 {
@@ -35,25 +38,45 @@ static void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t even
     rc522_picc_t *picc = event->picc;
 
     if (picc->state == RC522_PICC_STATE_ACTIVE) {
-        rc522_picc_print(picc);
+        app_handle_t app_event = {
+            .event_type = EV_RFID,
+        };
+
+        rc522_picc_uid_to_str(&picc->uid, app_event.rfid.uid, sizeof(app_event.rfid.uid));
+
+        xQueueSend(app_queue, &app_event, portMAX_DELAY);
     }
     else if (picc->state == RC522_PICC_STATE_IDLE && event->old_state >= RC522_PICC_STATE_ACTIVE) {
         ESP_LOGI(TAG, "Card has been removed");
     }
 }
 
-uint8_t rc522_init()
+uint8_t rc522_init(rc522_handle_t *out, QueueHandle_t owner_queue)
 {
-    ESP_ERROR_CHECK(rc522_spi_create(&driver_config, &driver));
-    ESP_ERROR_CHECK(rc522_driver_install(driver));
+    if(!out) return 1;
 
-    rc522_config_t scanner_config = {
-        .driver = driver,
-    };
+    if(!rc522_is_created) {
+        ESP_ERROR_CHECK(rc522_spi_create(&driver_config, &driver));
+        ESP_ERROR_CHECK(rc522_driver_install(driver));
 
-    ESP_ERROR_CHECK(rc522_create(&scanner_config, &scanner));
-    ESP_ERROR_CHECK(rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED, on_picc_state_changed, NULL));
-    ESP_ERROR_CHECK(rc522_start(scanner));
+        rc522_config_t scanner_config = {
+            .driver = driver,
+        };
 
+        rc522_handle_t scanner = NULL;
+
+        ESP_ERROR_CHECK(rc522_create(&scanner_config, &scanner));
+        ESP_ERROR_CHECK(rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED, on_picc_state_changed, NULL));
+
+        rc522_is_created = true;
+
+        *out = scanner;
+    }
+
+    if(!app_queue && owner_queue != NULL) {
+        app_queue = owner_queue;
+    }
+    
+    
     return 0;
 }
