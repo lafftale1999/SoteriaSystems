@@ -10,7 +10,7 @@
 
 #include <string.h>
 
-const char* TAG = "MAIN";
+const char* MAIN_TAG = "MAIN";
 
 int app_main(void)
 {
@@ -25,7 +25,7 @@ int app_main(void)
 
     alarm_system_handle_t alarm_system = NULL;
     if (init_alarm(&alarm_system) != 0) {
-        ESP_LOGE(TAG, "Unable to initialize alarm system");
+        ESP_LOGE(MAIN_TAG, "Unable to initialize alarm system");
     }
 
     while(true) {

@@ -25,6 +25,7 @@
     "4x4_matrix.h": "c",
     "freertos.h": "c",
     "stdint.h": "c",
-    "system_formatter.h": "c"
+    "system_formatter.h": "c",
+    "string.h": "c"
   }
 }

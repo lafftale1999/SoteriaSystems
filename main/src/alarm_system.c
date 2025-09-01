@@ -8,7 +8,7 @@
 #include "credentials.h"
 #include "wifi_implementation.h"
 #include "system_formatter.h"
-#include "http_implementaion.h"
+#include "http_implementation.h"
 #include "hash_sha256.h"
 
 #include "freertos/FreeRTOS.h"
@@ -78,17 +78,17 @@ bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action acti
     args->status = ESP_FAIL;
 
     if (action == ALARM_ARMED || action == ALARM_DISARMED || action == ALARM_NEW_USER) {
-        char* action_value = alarm_system_event[action];
+        const char* action_value = alarm_system_event[action];
         char cred_value_hashed[SHA256_OUT_SIZE];
         char type_value[4];
 
         if (event.event_type == EV_RFID) {
-            hash_sha256(event.rfid.uid, strlen(event.rfid.uid), cred_value_hashed);
+            hash_sha256((const unsigned char *)event.rfid.uid, strlen(event.rfid.uid), cred_value_hashed);
             snprintf(type_value, sizeof(type_value), "tag");
         } 
 
         else if (event.event_type == EV_PIN) {
-            hash_sha256(event.pin.pin, strlen(event.pin.pin), cred_value_hashed);
+            hash_sha256((const unsigned char *)event.pin.pin, strlen(event.pin.pin), cred_value_hashed);
             snprintf(type_value, sizeof(type_value), "pin");
         }
 
@@ -98,7 +98,7 @@ bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action acti
         json_values[2] = cred_value_hashed;
         json_values[3] = type_value;
         
-        create_request_body(json_keys, json_values, ALARM_ARMED_DISARMED_JSON_LEN, args->post_data, sizeof(args->post_data));
+        create_request_body(json_keys, (const char **)json_values, ALARM_ARMED_DISARMED_JSON_LEN, args->post_data, sizeof(args->post_data));
         snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_CHECK_AUTH);
     }
 
@@ -107,7 +107,7 @@ bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action acti
         json_values[0] = DEVICE_ID;
         json_values[1] = alarm_system_event[action];
         
-        create_request_body(json_keys, json_values, ALARM_TRIGGERED_JSON_LEN, args->post_data, sizeof(args->post_data));
+        create_request_body(json_keys, (const char **)json_values, ALARM_TRIGGERED_JSON_LEN, args->post_data, sizeof(args->post_data));
         snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_ALARM_TRIGGERED);
     }
 
@@ -116,14 +116,17 @@ bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action acti
         json_values[0] = DEVICE_ID;
         json_values[1] = alarm_system_event[action];
 
-        create_request_body(json_keys, json_values, ALARM_CHECK_IN_JSON_LEN, args->post_data, sizeof(args->post_data));
+        create_request_body(json_keys, (const char **)json_values, ALARM_CHECK_IN_JSON_LEN, args->post_data, sizeof(args->post_data));
         snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_CHECK_IN);
     }
 
-    xTaskCreate(http_post_task, "http_post_task", 4096, &args, 5, NULL);
+    xTaskCreate(http_post_task, "http_post_task", 4096, args, 5, NULL);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    return args->status == ESP_OK;
+    bool ok = args->status == ESP_OK;
+    free(args);
+
+    return ok;
 }
 
 static void motion_cb(void *handle) {
