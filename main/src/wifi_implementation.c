@@ -78,7 +78,7 @@ esp_err_t wait_for_connection(void) {
         WIFI_CONNECTED_BIT, // EventBit
         pdFALSE,            // Don't clear bit
         pdTRUE,             // wait for all bits
-        portMAX_DELAY);     // Wait until true
+        pdMS_TO_TICKS(WIFI_MAX_WAIT_MS));     // Wait until true
     
     ESP_LOGI(WIFI_TAG, "Wifi is connected!");
 

@@ -5,9 +5,10 @@
 #include "freertos/task.h"
 #include "esp_err.h"
 
-#define HTTP_MAX_URL_SIZE       255
-#define MAX_HTTP_OUTPUT_BUFFER  2048
-#define HTTP_REQUEST_BODY_SIZE  256
+#define HTTP_MAX_URL_SIZE           255
+#define MAX_HTTP_OUTPUT_BUFFER      2048
+#define HTTP_REQUEST_BODY_SIZE      256
+#define HTTP_POST_TASK_STACK_SIZE   4096
 
 typedef struct {
     char url[HTTP_MAX_URL_SIZE];
