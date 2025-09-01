@@ -253,6 +253,7 @@ static void alarm_add_user(alarm_system_handle_t handle) {
 
         vTaskDelay(pdMS_TO_TICKS(5000));
 
+        lcd_1602_send_string(handle->lcd_i2c_handle, " ");
         led_off(led);
     }
 }
@@ -324,8 +325,6 @@ static void alarm_wakeup(alarm_system_handle_t handle) {
     app_handle_t event;
 
     while(1) {
-        lcd_1602_send_string(handle->lcd_i2c_handle, " ");
-
         if(!xQueueReceive(handle->app_queue, &event, pdMS_TO_TICKS(WAIT_TIME_MS))) continue;
 
         if(event.event_type == EV_CHAR_RECEIVED) {
