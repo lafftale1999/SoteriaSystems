@@ -1,3 +1,1 @@
-* Implement https request
-* json parsing
-* 
+* Save current state in NVS
