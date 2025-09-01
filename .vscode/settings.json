@@ -24,6 +24,7 @@
     "alarm_system.h": "c",
     "4x4_matrix.h": "c",
     "freertos.h": "c",
-    "stdint.h": "c"
+    "stdint.h": "c",
+    "system_formatter.h": "c"
   }
 }

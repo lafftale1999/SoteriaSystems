@@ -13,7 +13,9 @@ typedef enum app_event_e{
     EV_RFID,
     EV_MOTION,
     EV_TIMEOUT,
-    EV_CHAR_RECEIVED
+    EV_CHAR_RECEIVED,
+    EV_TRIGGERED,
+    EV_CHECK_IN
 } app_event_e;
 
 typedef struct {

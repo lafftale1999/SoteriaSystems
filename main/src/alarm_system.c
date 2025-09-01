@@ -7,6 +7,9 @@
 #include "app_events.h"
 #include "credentials.h"
 #include "wifi_implementation.h"
+#include "system_formatter.h"
+#include "http_implementaion.h"
+#include "hash_sha256.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,23 +19,32 @@
 #include <ctype.h>
 
 #define TAG "ALARM_SYSTEM"
-#define WAIT_TIME_MS    10000
+#define WAIT_TIME_MS        10000
 #define CHECK_IN_PERIOD_MS (3600 * 1000)
 #define WIFI_CHECK_PERIOD   5000
 
 typedef enum {
     ALARM_ARMED,
-    ALARM_UNARMED,
+    ALARM_DISARMED,
     ALARM_IS_TRIGGERED,
     ALARM_CHECK_IN,
+    ALARM_NEW_USER,
     SYSTEM_ACTION_COUNT
 } alarm_system_action;
 
 static const char* alarm_system_event[SYSTEM_ACTION_COUNT] = {
     [ALARM_ARMED]       = "alarm_armed",
-    [ALARM_UNARMED]     = "alarm_unarmed",
+    [ALARM_DISARMED]     = "alarm_disarmed",
     [ALARM_IS_TRIGGERED]   = "alarm_triggered",
     [ALARM_CHECK_IN]    = "alarm_check_in",
+    [ALARM_NEW_USER]    = "new_user"
+};
+
+static const char* json_keys[] = {
+    "serial",
+    "action",
+    "credentials",
+    "type"
 };
 
 typedef enum {
@@ -59,6 +71,61 @@ uint8_t wrong_entries = 0; // should be save in NVS to not be able to restart.
 
 static TaskHandle_t s_alarm_task = NULL;
 
+bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action action, app_handle_t event) {
+    http_request_args_t *args = calloc(1, sizeof(*args));
+
+    args->caller = xTaskGetCurrentTaskHandle();
+    args->status = ESP_FAIL;
+
+    if (action == ALARM_ARMED || action == ALARM_DISARMED || action == ALARM_NEW_USER) {
+        char* action_value = alarm_system_event[action];
+        char cred_value_hashed[SHA256_OUT_SIZE];
+        char type_value[4];
+
+        if (event.event_type == EV_RFID) {
+            hash_sha256(event.rfid.uid, strlen(event.rfid.uid), cred_value_hashed);
+            snprintf(type_value, sizeof(type_value), "tag");
+        } 
+
+        else if (event.event_type == EV_PIN) {
+            hash_sha256(event.pin.pin, strlen(event.pin.pin), cred_value_hashed);
+            snprintf(type_value, sizeof(type_value), "pin");
+        }
+
+        char *json_values[ALARM_ARMED_DISARMED_JSON_LEN];
+        json_values[0] = DEVICE_ID;
+        json_values[1] = action_value;
+        json_values[2] = cred_value_hashed;
+        json_values[3] = type_value;
+        
+        create_request_body(json_keys, json_values, ALARM_ARMED_DISARMED_JSON_LEN, args->post_data, sizeof(args->post_data));
+        snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_CHECK_AUTH);
+    }
+
+    else if (action == ALARM_IS_TRIGGERED) {
+        char *json_values[ALARM_TRIGGERED_JSON_LEN];
+        json_values[0] = DEVICE_ID;
+        json_values[1] = alarm_system_event[action];
+        
+        create_request_body(json_keys, json_values, ALARM_TRIGGERED_JSON_LEN, args->post_data, sizeof(args->post_data));
+        snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_ALARM_TRIGGERED);
+    }
+
+    else if (action == ALARM_CHECK_IN) {
+        char *json_values[ALARM_CHECK_IN_JSON_LEN];
+        json_values[0] = DEVICE_ID;
+        json_values[1] = alarm_system_event[action];
+
+        create_request_body(json_keys, json_values, ALARM_CHECK_IN_JSON_LEN, args->post_data, sizeof(args->post_data));
+        snprintf(args->url, sizeof(args->url), "%s/%s", API_URL, API_CHECK_IN);
+    }
+
+    xTaskCreate(http_post_task, "http_post_task", 4096, &args, 5, NULL);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    return args->status == ESP_OK;
+}
+
 static void motion_cb(void *handle) {
     alarm_system_handle_t h = (alarm_system_handle_t)handle;
 
@@ -72,34 +139,16 @@ static void motion_cb(void *handle) {
     xQueueSend(h->app_queue, &event, portMAX_DELAY);
 }
 
-static bool check_cred(app_handle_t event) {
-    
-    vTaskDelay(pdMS_TO_TICKS(1000));
-
-    switch (event.event_type) {
-        case EV_RFID:
-        ESP_LOGI(TAG, "%s", event.rfid.uid);    
-        if(!strcmp(event.rfid.uid, "E3 2C 75 B7")) return true;
-            break;
-
-        case EV_PIN:
-            if(!strcmp(event.pin.pin, "4934")) return true;
-            break;
-
-        default:
-            break;
-    }
-
-    return false;
-}
-
 static void alarm_triggered_routine(void *args) {
     alarm_system_handle_t handle = (alarm_system_handle_t)args;
 
     if(!handle) vTaskDelete(NULL);
+    app_handle_t event = {
+        .event_type = EV_TRIGGERED
+    };
 
-    // send http post request
-    ESP_LOGI(TAG, "TRIGGERED ROUTINE");
+    alarm_send_to_server(handle, ALARM_IS_TRIGGERED, event);
+    
     while(state == ALARM_TRIGGERED) {
         led_blink(handle->red_led);
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -115,12 +164,12 @@ static bool check_authorized(alarm_system_handle_t handle) {
     rc522_start(handle->rc522);
 
     app_handle_t event;
+    alarm_system_action action = is_armed ? ALARM_DISARMED : ALARM_ARMED;
+
     uint8_t pin_len = 0;
     uint8_t pin_max_len = 4;
     char pin[5];
 
-    //test bool
-    bool is_auth = false;
     bool is_waiting = true;
 
     while(is_waiting) {
@@ -128,16 +177,13 @@ static bool check_authorized(alarm_system_handle_t handle) {
 
         switch (event.event_type) {
         case EV_RFID:
-            // send rfid
-            
             is_waiting = false;
-            lcd_1602_send_string(handle->lcd_i2c_handle, "Waiting ...");
-            is_auth = check_cred(event);
             break;
 
         case EV_CHAR_RECEIVED:
             if(event.key.key_pressed == 'C') {
-                is_waiting = false;
+                rc522_pause(handle->rc522);
+                return false;
             } else {
                 if(pin_len < pin_max_len) {
                     pin[pin_len++] = event.key.key_pressed;
@@ -149,11 +195,9 @@ static bool check_authorized(alarm_system_handle_t handle) {
                     app_handle_t pin_event = {
                         .event_type = EV_PIN
                     };
-
                     memcpy(pin_event.pin.pin, pin, sizeof(pin_event.pin.pin));
-                    // send pin
-                    lcd_1602_send_string(handle->lcd_i2c_handle, "Waiting ...");
-                    is_auth = check_cred(pin_event);
+
+                    event = pin_event;
                 }
             }    
             break;
@@ -162,16 +206,68 @@ static bool check_authorized(alarm_system_handle_t handle) {
             break;
         }
     }
-    rc522_pause(handle->rc522);
 
-    return is_auth;
+    rc522_pause(handle->rc522);
+    lcd_1602_send_string(handle->lcd_i2c_handle, "Waiting ...");
+
+    return alarm_send_to_server(handle, action, event);
+}
+
+static void alarm_add_user(alarm_system_handle_t handle) {
+    xQueueReset(handle->app_queue);
+    lcd_1602_send_string(handle->lcd_i2c_handle, "ADD NEW TAG\nScan new tag...");
+    rc522_start(handle->rc522);
+
+    app_handle_t event;
+
+    bool event_received = false;
+    bool tag_added = false;
+
+    while(!event_received) {
+        if(!xQueueReceive(handle->app_queue, &event, pdMS_TO_TICKS(WAIT_TIME_MS))) break;
+
+        if(event.event_type == EV_RFID) {
+            event_received = true;
+        }
+    }
+
+    led_off(handle->orange_led);
+    rc522_pause(handle->rc522);
+    
+    if(event_received) {
+        led_handle_t led;
+        tag_added = alarm_send_to_server(handle, ALARM_NEW_USER, event);
+        if(tag_added) {
+            led = handle->green_led;
+            led_on(led);
+            lcd_1602_send_string(handle->lcd_i2c_handle, "Tag added!\nCheck homepage!");
+        }
+        else {
+            led = handle->red_led;
+            led_on(led);
+            lcd_1602_send_string(handle->lcd_i2c_handle, "Tag not added!\nCheck homepage!");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
+
+        led_off(led);
+    }
 }
 
 static void set_alarm_armed(alarm_system_handle_t handle) {
     
     xQueueReset(handle->app_queue);
-    lcd_1602_send_string(handle->lcd_i2c_handle, "Pin:");
     
+    char menu_options[33];
+    if(!is_armed) {
+        snprintf(menu_options, sizeof(menu_options), "ARM SYSTEM\nENTER PIN: ");
+    }
+    else if (is_armed) {
+        snprintf(menu_options, sizeof(menu_options), "DISARM SYSTEM\nENTER PIN: ");
+    }
+
+    lcd_1602_send_string(handle->lcd_i2c_handle, menu_options);
+
     bool is_auth = check_authorized(handle);
 
     led_handle_t temp;
@@ -180,7 +276,7 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
     if(is_auth) {
         temp = handle->green_led;
         led_on(temp);
-        lcd_1602_send_string(handle->lcd_i2c_handle, "Welcome User!");
+        lcd_1602_send_string(handle->lcd_i2c_handle, "Welcome!");
         wrong_entries = 0;
     }
     else {
@@ -192,17 +288,20 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
 
     if(wrong_entries >= 3 && state != ALARM_TRIGGERED) {
         state = ALARM_TRIGGERED;
-        xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 3072, handle, 5, &s_alarm_task);
+        if(s_alarm_task == NULL) {
+            xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 1024, handle, 5, &s_alarm_task);
+        }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    
-    led_off(temp);
     if(is_auth) {
         is_armed = !is_armed;
         am312_set_armed(handle->sensor, is_armed);
         state = ALARM_SLEEP;
     }
+
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    led_off(temp);
 
     lcd_1602_send_string(handle->lcd_i2c_handle, " ");
 }
@@ -222,6 +321,8 @@ static void alarm_wakeup(alarm_system_handle_t handle) {
     app_handle_t event;
 
     while(1) {
+        lcd_1602_send_string(handle->lcd_i2c_handle, " ");
+
         if(!xQueueReceive(handle->app_queue, &event, pdMS_TO_TICKS(WAIT_TIME_MS))) continue;
 
         if(event.event_type == EV_CHAR_RECEIVED) {
@@ -230,7 +331,7 @@ static void alarm_wakeup(alarm_system_handle_t handle) {
                 break;
             }
             else if (event.key.key_pressed == 'B') {
-                // new user
+                alarm_add_user(handle);
                 break;
             }
             else if (event.key.key_pressed == 'C') {
@@ -258,7 +359,12 @@ void alarm_check_in_routine(void *args) {
 
         TickType_t now = xTaskGetTickCount();
         if ((now - last_check_in) >= check_in_period) {
-            // do check-in routine (HTTP POST etc.)
+            app_handle_t event = {
+                .event_type = EV_CHECK_IN
+            };
+
+            alarm_send_to_server(handle, ALARM_CHECK_IN, event);
+
             last_check_in += check_in_period;
         }
 
@@ -267,7 +373,7 @@ void alarm_check_in_routine(void *args) {
 }
 
 void run_alarm(alarm_system_handle_t handle) {
-    xTaskCreate(_4x4_matrix_task, "_4x4_matrix_task", 1048, NULL, 5, NULL);
+    xTaskCreate(_4x4_matrix_task, "_4x4_matrix_task", 1024, NULL, 5, NULL);
     
     app_handle_t event;
     
@@ -281,7 +387,9 @@ void run_alarm(alarm_system_handle_t handle) {
         else if(event.event_type == EV_MOTION) {
             if(state != ALARM_TRIGGERED) {
                 state = ALARM_TRIGGERED;
-                xTaskCreate(alarm_triggered_routine, "alarm_triggered_routine", 3072, handle, 5, &s_alarm_task);
+                if(s_alarm_task == NULL) {
+                    xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 2048, handle, 5, &s_alarm_task);
+                }
             }
         }
     }
@@ -361,12 +469,13 @@ _failed:
     if(h_temp->orange_led) free(h_temp->orange_led);
     if(h_temp->red_led) free(h_temp->red_led);
     if(h_temp->sensor) free(h_temp->sensor);
-    if(h_temp) free(h_temp);
     if(h_temp->app_queue) {
         QueueHandle_t temp = h_temp->app_queue;
         h_temp->app_queue = NULL;
         vQueueDelete(temp);
     }
+
+    if(h_temp) free(h_temp);
 
     return 1;
 }
