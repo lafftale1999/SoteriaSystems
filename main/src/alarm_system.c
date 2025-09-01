@@ -289,7 +289,7 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
     if(wrong_entries >= 3 && state != ALARM_TRIGGERED) {
         state = ALARM_TRIGGERED;
         if(s_alarm_task == NULL) {
-            xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 1024, handle, 5, &s_alarm_task);
+            xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 2048, handle, 5, &s_alarm_task);
         }
     }
 
@@ -455,7 +455,7 @@ uint8_t init_alarm(alarm_system_handle_t *out_handle) {
 
     *out_handle = h_temp;
 
-    xTaskCreate(alarm_check_in_routine, "alarm_check_in", 1048, h_temp, 5, NULL);
+    xTaskCreate(alarm_check_in_routine, "alarm_check_in", 2048, h_temp, 5, NULL);
 
     return 0;
 
