@@ -59,8 +59,7 @@ static const char* json_keys[] = {
 typedef enum {
     ALARM_ACTIVE,
     ALARM_SLEEP,
-    ALARM_WAITING,
-    ALARM_TRIGGERED
+    ALARM_WAITING
 } alarm_state;
 
 typedef struct alarm_system_handle{
@@ -75,6 +74,8 @@ typedef struct alarm_system_handle{
 } alarm_system_handle;
 
 static bool is_armed = false;
+static bool is_triggered = false;
+
 static alarm_state state = ALARM_SLEEP;
 uint8_t wrong_entries = 0; // should be save in NVS to not be able to restart.
 
@@ -87,7 +88,6 @@ bool alarm_send_to_server(alarm_system_handle_t handle, alarm_system_action acti
     args->status = ESP_FAIL;
 
     if (action == ALARM_ARMED || action == ALARM_DISARMED || action == ALARM_NEW_USER) {
-        const char* action_value = alarm_system_event[action];
         char cred_value_hashed[SHA256_OUT_SIZE];
         char type_value[JSON_KEY_VALUE_LEN];
 
@@ -165,7 +165,7 @@ static void alarm_triggered_routine(void *args) {
 
     alarm_send_to_server(handle, ALARM_IS_TRIGGERED, event);
     
-    while(state == ALARM_TRIGGERED) {
+    while(is_triggered) {
         led_blink(handle->red_led);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -178,8 +178,8 @@ static void alarm_triggered_routine(void *args) {
 
 static void trigger_alarm(alarm_system_handle_t handle) {
     if(is_armed) {
-        if(state != ALARM_TRIGGERED) {
-            state = ALARM_TRIGGERED;
+        if(!is_triggered) {
+            is_triggered = true;
             if(s_alarm_task == NULL) {
                 xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 2048, handle, 5, &s_alarm_task);
             }
@@ -327,8 +327,8 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
         wrong_entries++;
     }
 
-    if(wrong_entries >= 3 && state != ALARM_TRIGGERED) {
-        state = ALARM_TRIGGERED;
+    if(wrong_entries >= 3 && !is_triggered) {
+        is_triggered = true;
         if(s_alarm_task == NULL) {
             xTaskCreate(alarm_triggered_routine, "alarm_trigger_routine", 3072, handle, 5, &s_alarm_task);
         }
@@ -338,8 +338,8 @@ static void set_alarm_armed(alarm_system_handle_t handle) {
         is_armed = !is_armed;
         if(is_armed) vTaskDelay(pdMS_TO_TICKS(10000));
         am312_set_armed(handle->sensor, is_armed);
-        state = ALARM_SLEEP;
     }
+
     vTaskDelay(pdMS_TO_TICKS(3000));
     led_off(temp);
 }
@@ -358,10 +358,14 @@ static void alarm_wakeup(alarm_system_handle_t handle) {
 
     app_handle_t event;
 
+    state = ALARM_WAITING;
+
     while(1) {
         if(!xQueueReceive(handle->app_queue, &event, pdMS_TO_TICKS(WAIT_TIME_MS))) continue;
 
         if(event.event_type == EV_CHAR_RECEIVED) {
+            
+
             if (event.key.key_pressed == 'A') {
                 set_alarm_armed(handle);
                 break;
@@ -379,6 +383,8 @@ static void alarm_wakeup(alarm_system_handle_t handle) {
             trigger_alarm(handle);
         }
     }
+
+    state = ALARM_SLEEP;
 }
 
 void alarm_check_in_routine(void *args) {
@@ -390,12 +396,12 @@ void alarm_check_in_routine(void *args) {
     TickType_t last_check_in = last_wifi;
 
     while(1) {
-        if(!wifi_is_connected()) led_on(handle->red_led);
-        if(is_armed) led_on(handle->green_led);
+        if(!wifi_is_connected() && state != ALARM_WAITING) led_on(handle->orange_led);
+        if(is_armed && !is_triggered) led_on(handle->green_led);
 
         vTaskDelay(pdMS_TO_TICKS(100));
 
-        if(state != ALARM_TRIGGERED) led_off(handle->red_led);
+        if(state != ALARM_WAITING) led_off(handle->orange_led);
         led_off(handle->green_led);
 
         TickType_t now = xTaskGetTickCount();
@@ -487,8 +493,6 @@ uint8_t init_alarm(alarm_system_handle_t *out_handle) {
 
     wifi_init();
     wait_for_connection();
-
-    if(!wifi_is_connected()) goto _failed;
 
     *out_handle = h_temp;
 
