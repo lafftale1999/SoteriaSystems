@@ -6,3 +6,6 @@
 	path = components/lcd_1602_i2c_driver
 	url = https://github.com/lafftale1999/lcd_1602_i2c_driver.git
 	branch = main
+[submodule "components/rc522"]
+	path = components/rc522
+	url = git@github.com:lafftale1999/esp-idf-rc522.git
