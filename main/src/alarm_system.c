@@ -397,12 +397,12 @@ void alarm_check_in_routine(void *args) {
     TickType_t last_check_in = last_wifi;
 
     while(1) {
-        if(!wifi_is_connected() && state != ALARM_WAITING) led_on(handle->orange_led);
+        if(wifi_is_connected() && state != ALARM_WAITING) led_on(handle->orange_led);
         if(is_armed && !is_triggered) led_on(handle->green_led);
 
         vTaskDelay(pdMS_TO_TICKS(100));
 
-        if(state != ALARM_WAITING) led_off(handle->orange_led);
+        if(state != ALARM_WAITING && wifi_is_connected()) led_off(handle->orange_led);
         led_off(handle->green_led);
 
         TickType_t now = xTaskGetTickCount();
