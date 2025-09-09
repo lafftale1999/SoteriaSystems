@@ -131,6 +131,6 @@ git submodule status
 ## Words about the project
 This has been an amazing project for learning more about callback functions, opaque pointers to encapsulated and heap allocated data structures. I've also spent a lot of time working out how to handle the separate events by defining an event type and app_handle that are placed in a FreeRTOS queue that the main task consumes.
 
-We did not manage to get HTTPS working due to serverside problems, but this function should of course be implemented before even considering this system remotely safe. This was mainly build to make a more advanced solution, in collaboration with people working with other parts of the project and then integrating it.
+We did not manage to get HTTPS working due to limited time, but this function should of course be implemented before even considering this system remotely safe. This was mainly build to make a more advanced solution, in collaboration with people working with other parts of the project and then integrating it.
 
 Thank you for looking through it and please reach out to me if you have any questions!
