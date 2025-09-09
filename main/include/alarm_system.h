@@ -4,6 +4,7 @@
 #define RC522_PICC_UID_STR_BUFFER_SIZE_MAX 30
 
 #include <stdint.h>
+#include <driver/gpio.h>
 
 #define ALARM_TRIGGERED_JSON_LEN        2
 #define ALARM_CHECK_IN_JSON_LEN         2

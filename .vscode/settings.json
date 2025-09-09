@@ -26,6 +26,8 @@
     "freertos.h": "c",
     "stdint.h": "c",
     "system_formatter.h": "c",
-    "string.h": "c"
+    "string.h": "c",
+    "i2c_config.h": "c",
+    "gpio.h": "c"
   }
 }

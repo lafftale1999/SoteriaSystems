@@ -10,6 +10,7 @@
 #include "system_formatter.h"
 #include "http_implementation.h"
 #include "hash_sha256.h"
+#include "gpio_config.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -463,14 +464,14 @@ uint8_t init_alarm(alarm_system_handle_t *out_handle) {
     }
 
     // Keypad init
-    uint8_t row_pins[] = {GPIO_NUM_26, GPIO_NUM_25, GPIO_NUM_17, GPIO_NUM_16};
-    uint8_t col_pins[] = {GPIO_NUM_39, GPIO_NUM_36, GPIO_NUM_34, GPIO_NUM_35};
+    uint8_t row_pins[] = KEYPAD_ROW_PINS;
+    uint8_t col_pins[] = KEYPAD_COL_PINS;
     _4x4_matrix_init(row_pins, col_pins, h_temp->app_queue);
 
     // LEDs init
-    h_temp->green_led = led_init(GPIO_NUM_27);
-    h_temp->orange_led = led_init(GPIO_NUM_14);
-    h_temp->red_led = led_init(GPIO_NUM_12);
+    h_temp->green_led = led_init(GREEN_LED_PIN);
+    h_temp->orange_led = led_init(ORANGE_LED_PIN);
+    h_temp->red_led = led_init(RED_LED_PIN);
 
     if(!(h_temp->green_led && h_temp->orange_led && h_temp->red_led)) {
         ESP_LOGE(TAG, "Unable to initialize all leds");
@@ -484,7 +485,7 @@ uint8_t init_alarm(alarm_system_handle_t *out_handle) {
 
     if(h_temp->rc522 == NULL) ESP_LOGE(TAG, "Unable to initialize rc522");
     
-    h_temp->sensor = am312_init(GPIO_NUM_13, motion_cb, h_temp, 2500, 250);
+    h_temp->sensor = am312_init(AM312_SENSOR_PIN, motion_cb, h_temp, 2500, 250);
     
     if(h_temp->sensor == NULL) {
         ESP_LOGE(TAG, "Unable to initialize motions sensor");
