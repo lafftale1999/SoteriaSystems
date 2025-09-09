@@ -436,7 +436,7 @@ void run_alarm(alarm_system_handle_t handle) {
             trigger_alarm(handle);
         }
     }
-}
+} 
 
 uint8_t init_alarm(alarm_system_handle_t *out_handle) {
     
@@ -520,3 +520,6 @@ _failed:
 
     return 1;
 }
+
+
+
